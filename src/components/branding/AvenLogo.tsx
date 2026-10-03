@@ -66,7 +66,7 @@ export function AvenLogo({
           repeat: Infinity,
           ease: "easeInOut",
         },
-        layout: { type: "spring", stiffness: 180, damping: 26 },
+        layout: { type: "tween", duration: 0.58, ease: [0.22, 0.61, 0.36, 1] },
       }}
     >
       <PiFlowerLotusThin />

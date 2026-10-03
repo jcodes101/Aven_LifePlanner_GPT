@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useReducedMotion } from "framer-motion";
 import App from "../src/App";
 
 type MockRecognitionResult = {
@@ -13,13 +14,18 @@ type MockRecognitionEvent = {
 
 class MockSpeechRecognition {
   static instance: MockSpeechRecognition;
+  static failStart = false;
   lang = "";
   interimResults = false;
   continuous = false;
   onresult: ((event: MockRecognitionEvent) => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
   onend: (() => void) | null = null;
-  start = jest.fn();
+  start = jest.fn(() => {
+    if (MockSpeechRecognition.failStart) {
+      throw new Error("start failed");
+    }
+  });
   stop = jest.fn();
   abort = jest.fn();
 
@@ -29,7 +35,7 @@ class MockSpeechRecognition {
 }
 
 function enterApp() {
-  render(<App />);
+  const app = render(<App />);
   fireEvent.change(screen.getByLabelText("Username"), {
     target: { value: "planner" },
   });
@@ -39,7 +45,8 @@ function enterApp() {
   fireEvent.submit(
     screen.getByRole("button", { name: "Sign In" }).closest("form")!,
   );
-  act(() => jest.advanceTimersByTime(1900));
+  act(() => jest.advanceTimersByTime(2500));
+  return app;
 }
 
 function setSpeechRecognition(
@@ -57,9 +64,18 @@ function setSpeechRecognition(
 
 beforeEach(() => {
   jest.useFakeTimers();
+  jest.mocked(useReducedMotion).mockReturnValue(false);
   URL.createObjectURL = jest.fn(() => `blob:preview-${Math.random()}`);
   URL.revokeObjectURL = jest.fn();
   setSpeechRecognition(undefined);
+});
+
+test("cancels a pending sign-out timer when the app unmounts", () => {
+  const app = enterApp();
+  fireEvent.click(screen.getByRole("button", { name: "More options" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+  expect(screen.getByRole("img", { name: "Aven logo" })).toBeInTheDocument();
+  app.unmount();
 });
 
 afterEach(() => {
@@ -68,6 +84,24 @@ afterEach(() => {
   delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition;
   delete (window as Window & { webkitSpeechRecognition?: unknown })
     .webkitSpeechRecognition;
+  MockSpeechRecognition.failStart = false;
+});
+
+test("accepts supported extensions when the browser omits the MIME type", () => {
+  enterApp();
+  const fileInput = screen.getByLabelText("Choose PNG, JPG, or PDF files");
+  fireEvent.change(fileInput, {
+    target: { files: [new File(["image"], "plan.jpg")] },
+  });
+
+  expect(screen.getByRole("img", { name: "plan.jpg" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+test("does not send an empty draft when the send button is pressed", () => {
+  enterApp();
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  expect(screen.queryByRole("status", { name: "Aven is thinking" })).toBeNull();
 });
 
 describe("Aven interface", () => {
@@ -79,6 +113,17 @@ describe("Aven interface", () => {
     expect(
       screen.getByRole("heading", { name: "Welcome to Aven" }),
     ).toBeInTheDocument();
+  });
+
+  test("keeps the conversation when the already-selected mode is clicked", () => {
+    enterApp();
+    fireEvent.click(screen.getByRole("button", { name: "FINANCIALITY" }));
+    fireEvent.change(screen.getByLabelText("Message Aven"), {
+      target: { value: "keep this draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "FINANCIALITY" }));
+
+    expect(screen.getByLabelText("Message Aven")).toHaveValue("keep this draft");
   });
 
   test("opens More on hover and collapses it on click or Escape", () => {
@@ -103,6 +148,10 @@ describe("Aven interface", () => {
     fireEvent.click(moreButton);
     fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
 
+    expect(
+      screen.queryByRole("heading", { name: "Welcome to Aven" }),
+    ).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(650));
     expect(
       screen.getByRole("heading", { name: "Welcome to Aven" }),
     ).toBeInTheDocument();
@@ -145,6 +194,43 @@ describe("Aven interface", () => {
     expect(deepThinking).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("uses the selected mode palette for the Deep thinking spark", () => {
+    enterApp();
+    fireEvent.click(screen.getByRole("button", { name: "WELLNESS & HEALTH" }));
+    const deepThinking = screen.getByRole("button", { name: "Deep thinking" });
+    fireEvent.click(deepThinking);
+
+    const gradientStops = deepThinking.querySelectorAll("linearGradient stop");
+    expect(gradientStops).toHaveLength(4);
+    expect(gradientStops[0]).toHaveAttribute("stop-color", "#f5d9c8");
+    expect(gradientStops[1]).toHaveAttribute("stop-color", "#fce7ee");
+    expect(gradientStops[2]).toHaveAttribute("stop-color", "#edf7d8");
+    expect(gradientStops[3]).toHaveAttribute("stop-color", "#f6d7b8");
+    const animatedSpark = deepThinking.querySelector("g > text animateMotion");
+    expect(animatedSpark).toHaveAttribute("dur", "3.4s");
+    expect(deepThinking.querySelectorAll("g > path animateMotion")).toHaveLength(
+      5,
+    );
+    expect(animatedSpark).toHaveAttribute(
+      "path",
+      deepThinking.querySelector("path")?.getAttribute("d"),
+    );
+    expect(
+      deepThinking.querySelector("g > path")?.getAttribute("d"),
+    ).toBe("M -4,0 H 0");
+  });
+
+  test("honors reduced-motion preferences during app entry", () => {
+    jest.mocked(useReducedMotion).mockReturnValue(true);
+    enterApp();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "A clearer view of where you are, where you're going, and what's possible.",
+      }),
+    ).toBeInTheDocument();
+  });
+
   test("shows and removes image and PDF previews, then sends attachments to chat", () => {
     enterApp();
     const fileInput = screen.getByLabelText("Choose PNG, JPG, or PDF files");
@@ -184,6 +270,37 @@ describe("Aven interface", () => {
       "Only PNG, JPG, and PDF files are supported.",
     );
     expect(screen.getByRole("img", { name: "photo.jpg" })).toBeInTheDocument();
+  });
+
+  test("rejects files whose extension and declared MIME type disagree", () => {
+    enterApp();
+    const fileInput = screen.getByLabelText("Choose PNG, JPG, or PDF files");
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["document"], "plan.pdf", { type: "text/plain" })],
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Only PNG, JPG, and PDF files are supported.",
+    );
+    expect(screen.queryByText("plan.pdf")).not.toBeInTheDocument();
+  });
+
+  test("allows Enter to send a draft and blocks duplicate sends while thinking", () => {
+    enterApp();
+    const composer = screen.getByLabelText("Message Aven");
+    fireEvent.change(composer, { target: { value: "First message" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(screen.getByText("First message")).toBeInTheDocument();
+
+    fireEvent.change(composer, { target: { value: "Second message" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(screen.queryByText("Second message")).not.toBeInTheDocument();
+
+    act(() => jest.advanceTimersByTime(5000));
+    expect(screen.getByText("First message")).toBeInTheDocument();
+    expect(screen.queryByText("Second message")).not.toBeInTheDocument();
   });
 
   test("uses browser speech recognition and appends its transcript to the draft", () => {
@@ -230,6 +347,41 @@ describe("Aven interface", () => {
     );
   });
 
+  test("announces speech startup and recognition errors", () => {
+    setSpeechRecognition(MockSpeechRecognition);
+    enterApp();
+    MockSpeechRecognition.failStart = true;
+    fireEvent.click(screen.getByRole("button", { name: "Voice input" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unable to start speech recognition.",
+    );
+
+    MockSpeechRecognition.failStart = false;
+    setSpeechRecognition(MockSpeechRecognition);
+    fireEvent.click(screen.getByRole("button", { name: "Voice input" }));
+    act(() => {
+      MockSpeechRecognition.instance.onerror?.({ error: "network" });
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Speech recognition ran into a problem.",
+    );
+  });
+
+  test("clears speech status when recognition ends without a transcript", () => {
+    setSpeechRecognition(MockSpeechRecognition);
+    enterApp();
+    fireEvent.click(screen.getByRole("button", { name: "Voice input" }));
+    act(() => {
+      MockSpeechRecognition.instance.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: false, 0: { transcript: "" } }],
+      });
+      MockSpeechRecognition.instance.onend?.();
+    });
+    expect(screen.queryByText("Listening. Speak now.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message Aven")).toHaveValue("");
+  });
+
   test("displays the AI accuracy note and returns the mock response", () => {
     enterApp();
     expect(
@@ -247,5 +399,47 @@ describe("Aven interface", () => {
         "Let's look at the patterns in your life and explore what direction feels most aligned for you right now.",
       ),
     ).toBeInTheDocument();
+  });
+
+  test("supports multiline chat drafts and keeps Shift+Enter in the draft", () => {
+    enterApp();
+    const composer = screen.getByLabelText("Message Aven");
+
+    expect(composer.tagName).toBe("TEXTAREA");
+    fireEvent.change(composer, {
+      target: { value: "A longer thought that wraps\nand continues below." },
+    });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: true });
+
+    expect(composer).toHaveValue(
+      "A longer thought that wraps\nand continues below.",
+    );
+    expect(screen.queryByText("A longer thought that wraps")).toBeNull();
+  });
+
+  test("shows the theme-colored circular AI thinking indicator while responding", () => {
+    enterApp();
+    fireEvent.click(screen.getByRole("button", { name: "WELLNESS & HEALTH" }));
+    fireEvent.change(screen.getByLabelText("Message Aven"), {
+      target: { value: "Help me plan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    const indicator = screen.getByRole("status", {
+      name: "Aven is thinking",
+    });
+    const circleLoader = screen.getByTestId("circle-loader");
+    expect(circleLoader).toHaveAttribute("data-color", "#36d7b7");
+    expect(circleLoader).toHaveAttribute("data-size", "40");
+    expect(circleLoader).toHaveAttribute("data-speed-multiplier", "0.7");
+    expect(indicator.querySelector(".z-2")).toHaveStyle({
+      background:
+        "conic-gradient(from 0deg, #f5d9c8, #fce7ee, #edf7d8, #f6d7b8, #f5d9c8)",
+    });
+
+    act(() => jest.advanceTimersByTime(5000));
+    expect(
+      screen.queryByRole("status", { name: "Aven is thinking" }),
+    ).not.toBeInTheDocument();
   });
 });

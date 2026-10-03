@@ -1,18 +1,19 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { CircleLoader } from "react-spinners";
 import {
   PiFileTextThin,
   PiMicrophoneThin,
   PiPaperclipThin,
   PiPaperPlaneRightThin,
-  PiSparkleThin,
   PiXThin,
 } from "react-icons/pi";
-import { AvenRing } from "../branding/AvenLogo";
+import { DeepThinkingButton } from "../ui/DeepThinkingButton";
 import type { ChatAttachment, ChatMessage, VoiceStatus } from "../../types";
 
 export function ChatBox({
   accent,
+  themeColors,
   value,
   onChange,
   onSend,
@@ -27,6 +28,7 @@ export function ChatBox({
   onVoiceToggle,
 }: {
   accent: string;
+  themeColors: [string, string, string];
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -41,7 +43,18 @@ export function ChatBox({
   onVoiceToggle: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   const [deepThinkingEnabled, setDeepThinkingEnabled] = useState(false);
+
+  useEffect(() => {
+    const textarea = composer.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const height = Math.min(textarea.scrollHeight, 160);
+    textarea.style.height = `${height}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
+  }, [value]);
 
   return (
     <div className="w-full max-w-255 rounded-[30px] border border-white/40 bg-white/10 p-4.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_18px_32px_rgba(120,118,166,0.09)] backdrop-blur-[18px] max-[760px]:px-3 max-[760px]:py-3">
@@ -94,22 +107,29 @@ export function ChatBox({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
+              role="status"
+              aria-label="Aven is thinking"
             >
-              <motion.div
-                className="relative grid h-7 w-7 place-items-center rounded-full bg-white/10 text-[rgba(30,34,47,0.8)]"
-                animate={{
-                  scale: [0.95, 1.08, 0.95],
-                  opacity: [0.65, 1, 0.65],
-                }}
-                transition={{
-                  duration: 1.3,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-              >
-                <AvenRing accent={accent} active />
-                <span aria-hidden="true">✦</span>
-              </motion.div>
+              <div className="relative h-10 w-10">
+                <CircleLoader
+                  color="#36d7b7"
+                  size={40}
+                  speedMultiplier={0.7}
+                  loading={!prefersReducedMotion}
+                  cssOverride={{ position: "relative", zIndex: 1 }}
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-2 rounded-full"
+                  style={{
+                    background: `conic-gradient(from 0deg, ${accent}, ${themeColors[0]}, ${themeColors[1]}, ${themeColors[2]}, ${accent})`,
+                    mask: "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+                    WebkitMask:
+                      "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+                    opacity: 0.8,
+                  }}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -171,19 +191,25 @@ export function ChatBox({
           }}
         />
 
-        <input
-          type="text"
+        <textarea
+          ref={composer}
+          rows={1}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (value.trim() || attachments.length)) {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing &&
+              (value.trim() || attachments.length)
+            ) {
               event.preventDefault();
               onSend();
             }
           }}
           placeholder="Tell me what's on your mind..."
           aria-label="Message Aven"
-          className="w-full rounded-[18px] border border-white/40 bg-white/9 px-4.5 py-4.5 text-base font-light text-[rgba(32,34,47,0.9)] placeholder:text-[rgba(55,58,74,0.63)] focus:border-[rgba(184,170,255,0.8)] focus:outline-none focus:shadow-[0_0_0_4px_rgba(169,157,255,0.16)]"
+          className="min-h-16 max-h-40 w-full resize-none overflow-y-hidden whitespace-pre-wrap break-words rounded-[18px] border border-white/40 bg-white/9 px-4.5 py-4.5 text-base font-light text-[rgba(32,34,47,0.9)] placeholder:text-[rgba(55,58,74,0.63)] focus:border-[rgba(184,170,255,0.8)] focus:outline-none focus:shadow-[0_0_0_4px_rgba(169,157,255,0.16)]"
         />
 
         <div className="flex flex-wrap items-center gap-2.5 max-[760px]:gap-2">
@@ -197,43 +223,13 @@ export function ChatBox({
             <PiPaperclipThin />
           </button>
 
-          <button
-            type="button"
-            className="relative isolate inline-flex items-center gap-2 overflow-visible rounded-full border border-white/40 bg-white/9 px-3.5 py-2.25 text-[0.82rem] font-light text-[rgba(29,33,45,0.8)] shadow-[inset_0_1px_0_rgba(255,255,255,0.26)]"
-            aria-label="Deep thinking"
-            aria-pressed={deepThinkingEnabled}
-            onClick={() => setDeepThinkingEnabled((current) => !current)}
-          >
-            <motion.span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-full"
-              style={{
-                background: `conic-gradient(from 0deg, transparent 0deg 245deg, ${accent} 280deg, transparent 315deg)`,
-                mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px))",
-                WebkitMask:
-                  "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px))",
-                filter: `drop-shadow(0 0 5px ${accent})`,
-              }}
-              animate={
-                deepThinkingEnabled
-                  ? { rotate: 360, opacity: 1 }
-                  : { rotate: 0, opacity: 0 }
-              }
-              transition={
-                deepThinkingEnabled
-                  ? { duration: 2.8, repeat: Infinity, ease: "linear" }
-                  : { duration: 0.2 }
-              }
-            />
-            <motion.span
-              aria-hidden="true"
-              className="absolute inset-[1px] rounded-full bg-white/8"
-              animate={{ opacity: deepThinkingEnabled ? 0.75 : 0.45 }}
-              transition={{ duration: 0.2 }}
-            />
-            <PiSparkleThin className="relative z-10" />
-            <span className="relative z-10">Deep thinking</span>
-          </button>
+          <DeepThinkingButton
+            colors={[accent, ...themeColors]}
+            enabled={deepThinkingEnabled}
+            onToggle={() =>
+              setDeepThinkingEnabled((current) => !current)
+            }
+          />
 
           <button
             type="button"

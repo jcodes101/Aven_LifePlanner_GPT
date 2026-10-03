@@ -17,29 +17,30 @@ export function AuthScreen({
 }) {
   return (
     <motion.div
-      className="relative z-10 grid min-h-[calc(100vh-56px)] place-items-center"
-      initial={{ opacity: 0, filter: "blur(0px)" }}
-      animate={{ opacity: 1, filter: "blur(0px)" }}
-      exit={{ opacity: 0, filter: "blur(7px)" }}
-      transition={{ duration: 0.55, ease: "easeInOut" }}
+      className="auth-screen relative z-10 grid min-h-[calc(100vh-56px)] place-items-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.48, ease: [0.22, 0.61, 0.36, 1] }}
     >
       <motion.div
-        className="w-[min(520px,calc(100vw-32px))] rounded-[28px] border border-white/40 bg-white/12 px-7.5 pb-5.5 pt-7 shadow-[0_24px_60px_rgba(108,93,158,0.13)] backdrop-blur-[18px] max-[760px]:px-5"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+        className="auth-card w-[min(520px,calc(100vw-32px))] rounded-[28px] border border-white/40 bg-white/12 px-7.5 pb-5.5 pt-7 shadow-[0_24px_60px_rgba(108,93,158,0.13)] backdrop-blur-[18px] max-[760px]:px-5"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
       >
-        <div className="mb-3 flex justify-center">
+        <div className="auth-logo-wrap mb-3 flex justify-center">
           <AvenLogo size="small" layoutId="aven-primary-lotus" />
         </div>
 
         <h1 className="m-0 text-center text-[clamp(2rem,2.6vw,2.6rem)] font-light leading-tight text-[rgba(30,32,44,0.9)]">
           Welcome to Aven
         </h1>
-        <p className="mx-auto mb-5.5 mt-2.5 text-center text-base font-light text-[rgba(52,56,78,0.72)]">
+        <p className="auth-description mx-auto mb-5.5 mt-2.5 text-center text-base font-light text-[rgba(52,56,78,0.72)]">
           Your life, your goals, your possibilities.
         </p>
 
-        <form className="grid gap-3.5" onSubmit={onSubmit}>
+        <form className="auth-form grid gap-3.5" onSubmit={onSubmit}>
           <label className="relative">
             <span className="sr-only">Username</span>
             <input
@@ -66,13 +67,13 @@ export function AuthScreen({
 
           <button
             type="submit"
-            className="mt-2.5 cursor-pointer rounded-2xl border border-white/40 bg-[linear-gradient(135deg,rgba(255,255,255,0.32),rgba(210,214,255,0.22))] px-4.5 py-3.5 text-base font-light text-[rgba(27,29,42,0.88)] shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_10px_18px_rgba(142,126,205,0.1)]"
+            className="auth-submit mt-2.5 cursor-pointer rounded-2xl border border-white/40 bg-[linear-gradient(135deg,rgba(255,255,255,0.32),rgba(210,214,255,0.22))] px-4.5 py-3.5 text-base font-light text-[rgba(27,29,42,0.88)] shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_10px_18px_rgba(142,126,205,0.1)]"
           >
             Sign In
           </button>
         </form>
 
-        <div className="mt-4.5 flex flex-wrap justify-center gap-4.5">
+        <div className="auth-links mt-4.5 flex flex-wrap justify-center gap-4.5">
           <button
             type="button"
             className="cursor-pointer bg-transparent font-light text-[rgba(59,63,86,0.74)]"

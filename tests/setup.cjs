@@ -33,9 +33,21 @@ jest.mock("framer-motion", () => {
     LayoutGroup: ({ children }) => children ?? null,
     motion,
     useAnimate: () => [null, jest.fn()],
-    useReducedMotion: () => false,
+    useReducedMotion: jest.fn(() => false),
   };
 });
+
+jest.mock("react-spinners", () => ({
+  CircleLoader: ({ color, size, speedMultiplier, loading }) =>
+    loading
+      ? require("react").createElement("span", {
+          "data-testid": "circle-loader",
+          "data-color": color,
+          "data-size": size,
+          "data-speed-multiplier": speedMultiplier,
+        })
+      : null,
+}));
 
 if (!window.matchMedia) {
   window.matchMedia = (media) => ({

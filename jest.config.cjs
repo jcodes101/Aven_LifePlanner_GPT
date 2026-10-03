@@ -10,6 +10,7 @@ module.exports = {
     global: {
       lines: 85,
       statements: 85,
+      branches: 85,
     },
   },
   coverageReporters: ["text", "lcov"],

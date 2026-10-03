@@ -35,16 +35,74 @@ body {
   background: #f4f0f4;
 }
 
-button, input {
-  font: inherit;
-}
+@layer base {
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
 
-button {
-  border: 0;
+  button {
+    border: 0;
+  }
 }
 
 svg {
   display: block;
+}
+
+.app-shell {
+  overflow-x: clip;
+}
+
+.app-shell.is-transitioning {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: clip;
+}
+
+@media (max-height: 600px) {
+  .app-shell:not(.is-transitioning) {
+    padding-block: 8px;
+  }
+
+  .auth-screen {
+    min-height: calc(100dvh - 16px);
+    align-items: start;
+    padding-block: 8px;
+  }
+
+  .auth-card {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+
+  .auth-logo-wrap {
+    margin-bottom: 8px;
+  }
+
+  .auth-description {
+    margin-top: 6px;
+    margin-bottom: 12px;
+  }
+
+  .auth-form {
+    gap: 8px;
+  }
+
+  .auth-form input {
+    padding-block: 10px;
+  }
+
+  .auth-submit {
+    margin-top: 4px;
+    padding-block: 10px;
+  }
+
+  .auth-links {
+    margin-top: 12px;
+    gap: 12px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

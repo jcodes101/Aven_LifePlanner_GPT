@@ -75,7 +75,7 @@ function ModeSelector({
         <motion.button
           key={mode}
           type="button"
-          className={`relative z-10 min-h-10 cursor-pointer rounded-full border border-white/40 px-4.5 py-2.5 text-[0.7rem] font-light tracking-[0.08em] text-[rgba(37,39,52,0.86)] transition-[background,box-shadow] duration-200 max-[760px]:min-w-34.5 max-[760px]:flex-auto ${activeMode === mode ? "bg-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_12px_16px_rgba(136,120,184,0.1)]" : "bg-white/8 hover:bg-white/20 hover:shadow-[0_8px_16px_rgba(136,120,184,0.08)]"}`}
+          className={`relative z-10 min-h-11 cursor-pointer rounded-full border border-white/40 px-5 py-3 text-[0.76rem] font-light tracking-[0.08em] text-[rgba(37,39,52,0.86)] transition-[background,box-shadow] duration-200 max-[760px]:min-w-36 max-[760px]:flex-auto ${activeMode === mode ? "bg-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_12px_16px_rgba(136,120,184,0.1)]" : "bg-white/8 hover:bg-white/20 hover:shadow-[0_8px_16px_rgba(136,120,184,0.08)]"}`}
           onClick={() => onSelect(mode)}
           aria-pressed={activeMode === mode}
           whileHover={{ y: -2, scale: 1.015 }}
@@ -118,6 +118,23 @@ function IntroAnimation({ accent, glow }: { accent: string; glow: string }) {
   );
 }
 
+function SignOutAnimation() {
+  return (
+    <motion.div
+      className="fixed inset-0 z-30 grid place-items-center bg-white/5"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+    >
+      <div className="relative grid place-items-center">
+        <AvenRing accent={MODE_THEMES.default.accent} />
+        <AvenLogo size="large" layoutId="aven-primary-lotus" />
+      </div>
+    </motion.div>
+  );
+}
+
 function AvenHome({
   activeMode,
   onModeChange,
@@ -154,14 +171,15 @@ function AvenHome({
   onVoiceToggle: () => void;
 }) {
   const theme = MODE_THEMES[activeMode];
+  const prefersReducedMotion = useReducedMotion();
 
   return (
     <motion.div
       className="relative z-10 flex min-h-[calc(100vh-56px)] flex-col px-5.5 pb-4.5 pt-2.5 max-[760px]:px-2"
-      initial={{ opacity: 0, filter: "blur(7px)" }}
-      animate={{ opacity: 1, filter: "blur(0px)" }}
-      exit={{ opacity: 0, filter: "blur(5px)" }}
-      transition={{ duration: 0.78, ease: "easeInOut" }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.48, ease: [0.22, 0.61, 0.36, 1] }}
     >
       <motion.header
         className="relative z-20 grid min-h-26.5 grid-cols-[1fr_auto_1fr] items-center max-[760px]:min-h-44 max-[760px]:grid-cols-2 max-[760px]:grid-rows-[40px_auto] max-[760px]:gap-y-25 max-[760px]:py-1"
@@ -171,7 +189,7 @@ function AvenHome({
       >
         <button
           type="button"
-          className="ml-1 w-fit cursor-pointer bg-transparent p-0 text-left text-[clamp(1.8rem,2.1vw,2.2rem)] font-semibold tracking-[-0.08em] text-[rgba(33,35,49,0.9)] max-[760px]:ml-0"
+          className="ml-1 w-fit cursor-pointer bg-transparent p-0 text-left text-[clamp(2.4rem,3vw,3rem)] font-semibold tracking-[-0.065em] text-[rgba(33,35,49,0.9)] max-[760px]:ml-0"
           aria-label="Aven, return to General"
           onClick={onReturnToGeneral}
         >
@@ -241,13 +259,30 @@ function AvenHome({
         </AnimatePresence>
 
         <motion.div
+          layout="position"
           className="flex w-full justify-center"
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.62, delay: 0.28, ease: "easeOut" }}
+          transition={{
+            layout: {
+              duration: prefersReducedMotion ? 0 : 0.95,
+              ease: [0.22, 0.61, 0.36, 1],
+            },
+            opacity: { duration: prefersReducedMotion ? 0 : 0.85, delay: 0.2 },
+            y: {
+              duration: prefersReducedMotion ? 0 : 1.05,
+              delay: prefersReducedMotion ? 0 : 0.2,
+              ease: [0.22, 0.61, 0.36, 1],
+            },
+          }}
         >
           <ChatBox
             accent={theme.accent}
+            themeColors={[
+              theme.background.center,
+              theme.background.mid,
+              theme.background.glow,
+            ]}
             value={draft}
             onChange={onDraftChange}
             onSend={onSend}
@@ -275,7 +310,10 @@ function App() {
   const prefersReducedMotion = useReducedMotion();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [screen, setScreen] = useState<"auth" | "intro" | "home">("auth");
+  const [screen, setScreen] = useState<"auth" | "intro" | "home" | "signout">(
+    "auth",
+  );
+  const [screenTransitioning, setScreenTransitioning] = useState(false);
   const [selectedMode, setSelectedMode] = useState<ThemeKey>("default");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -285,6 +323,8 @@ function App() {
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [voiceMessage, setVoiceMessage] = useState("");
   const responseTimer = useRef<number | null>(null);
+  const signOutTimer = useRef<number | null>(null);
+  const screenTransitionTimer = useRef<number | null>(null);
   const speechRecognition = useRef<SpeechRecognitionLike | null>(null);
   const previewUrls = useRef(new Set<string>());
 
@@ -304,6 +344,12 @@ function App() {
     return () => {
       if (responseTimer.current !== null) {
         window.clearTimeout(responseTimer.current);
+      }
+      if (signOutTimer.current !== null) {
+        window.clearTimeout(signOutTimer.current);
+      }
+      if (screenTransitionTimer.current !== null) {
+        window.clearTimeout(screenTransitionTimer.current);
       }
       speechRecognition.current?.abort();
       previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -436,8 +482,15 @@ function App() {
       return;
     }
 
+    setScreenTransitioning(true);
     setScreen("intro");
-    window.setTimeout(() => setScreen("home"), 1900);
+    window.setTimeout(() => {
+      setScreen("home");
+      screenTransitionTimer.current = window.setTimeout(
+        () => setScreenTransitioning(false),
+        600,
+      );
+    }, 1900);
   };
 
   const resetConversation = () => {
@@ -497,14 +550,25 @@ function App() {
 
   const handleSignOut = () => {
     resetConversation();
-    setScreen("auth");
+    setScreenTransitioning(true);
+    setScreen("signout");
     setSelectedMode("default");
     setUsername("");
     setPassword("");
+    signOutTimer.current = window.setTimeout(() => {
+      signOutTimer.current = null;
+      setScreen("auth");
+      screenTransitionTimer.current = window.setTimeout(
+        () => setScreenTransitioning(false),
+        600,
+      );
+    }, 650);
   };
 
   return (
-    <div className="relative min-h-screen px-7 py-7 max-[760px]:px-3.5">
+    <div
+      className={`app-shell relative min-h-screen px-7 py-7 max-[760px]:px-3.5 ${screenTransitioning ? "is-transitioning" : ""}`}
+    >
       <motion.div
         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         aria-hidden="true"
@@ -577,6 +641,7 @@ function App() {
               glow={MODE_THEMES[selectedMode].background.glow}
             />
           )}
+          {screen === "signout" && <SignOutAnimation key="signout" />}
           {screen === "home" && (
             <AvenHome
               key="home"
