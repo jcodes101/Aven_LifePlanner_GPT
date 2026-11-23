@@ -149,6 +149,11 @@ stripped from replies. Gemini-specific outcomes (invalid key returned as 400,
 quota 429, unknown model 404, safety blocks, thinking that uses the whole
 token budget) are mapped to the API error codes below.
 
+Two safeguards for real keys: on startup the server checks that `AI_MODEL`
+is in the key's model list and logs a warning if not (it never blocks
+startup), and if a model rejects `AI_THINKING_LEVEL`, the request is retried
+once without it and the setting is skipped from then on.
+
 ## Life Planning behavior
 
 The coaching behavior is defined in `server/prompts/lifePlanning.ts`
