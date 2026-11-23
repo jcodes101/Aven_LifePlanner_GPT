@@ -111,6 +111,7 @@ describe("sendLifePlanningMessage", () => {
     [503, { error: { code: "ai_busy" } }, "rate_limited", true],
     [504, { error: { code: "ai_timeout" } }, "timeout", true],
     [400, { error: { code: "invalid_request" } }, "invalid_request", false],
+    [422, { error: { code: "ai_blocked" } }, "blocked", false],
     [502, { error: { code: "ai_provider_error" } }, "server", true],
     [500, null, "server", true],
     [200, { message: {} }, "invalid_response", true],

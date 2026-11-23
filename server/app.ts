@@ -23,6 +23,7 @@ export type ErrorCode =
   | "ai_not_configured"
   | "ai_timeout"
   | "ai_busy"
+  | "ai_blocked"
   | "ai_provider_error";
 
 export type LifePlanningSuccess = {
@@ -140,6 +141,12 @@ function mapProviderError(error: unknown): HttpError {
           503,
           "ai_busy",
           "Aven is handling a lot of requests right now. Please try again shortly.",
+        );
+      case "blocked":
+        return new HttpError(
+          422,
+          "ai_blocked",
+          "Aven can't respond to that message. Try rephrasing it.",
         );
       default:
         break;
@@ -262,6 +269,10 @@ export function createApp({
           error instanceof AIProviderError
             ? `${error.kind} ${error.status ?? ""}`.trim()
             : "unexpected"
+        }${
+          error instanceof AIProviderError && error.status === 404
+            ? ' (check AI_MODEL; run "npm run models")'
+            : ""
         }`,
       );
       throw mapped;

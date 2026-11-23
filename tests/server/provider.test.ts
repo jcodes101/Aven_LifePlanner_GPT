@@ -116,17 +116,20 @@ describe("OpenAI provider", () => {
 });
 
 describe("configuration", () => {
-  test("uses safe defaults and never requires a key to start", () => {
+  test("uses safe defaults, defaults to Gemini, and never requires a key to start", () => {
     const config = loadConfig({});
     expect(config.port).toBe(8787);
     expect(config.allowedOrigins).toEqual([
       "http://localhost:5173",
       "http://127.0.0.1:5173",
     ]);
-    expect(config.ai.apiKey).toBeNull();
+    expect(config.ai.provider).toBe("gemini");
+    expect(config.ai.gemini.apiKey).toBeNull();
+    expect(config.ai.maxOutputTokens).toBe(4096);
+    expect(config.ai.thinkingLevel).toBeNull();
     expect(createProvider(config.ai)).toEqual({
       configured: false,
-      reason: "OPENAI_API_KEY is not set.",
+      reason: "GEMINI_API_KEY is not set.",
     });
   });
 
@@ -149,20 +152,37 @@ describe("configuration", () => {
   });
 
   test("requires a model and a supported provider", () => {
-    expect(createProvider(loadConfig({ OPENAI_API_KEY: "sk" }).ai)).toEqual({
+    expect(createProvider(loadConfig({ GEMINI_API_KEY: "g" }).ai)).toEqual({
       configured: false,
       reason: "AI_MODEL is not set.",
     });
     expect(
-      createProvider(
-        loadConfig({ OPENAI_API_KEY: "sk", AI_MODEL: "m", AI_PROVIDER: "other" }).ai,
-      ),
-    ).toEqual({ configured: false, reason: 'AI_PROVIDER "other" is not supported yet.' });
+      createProvider(loadConfig({ AI_PROVIDER: "openai", AI_MODEL: "m" }).ai),
+    ).toEqual({ configured: false, reason: "OPENAI_API_KEY is not set." });
+    expect(
+      createProvider(loadConfig({ AI_PROVIDER: "openai", OPENAI_API_KEY: "sk" }).ai),
+    ).toEqual({ configured: false, reason: "AI_MODEL is not set." });
+    expect(
+      createProvider(loadConfig({ AI_MODEL: "m", AI_PROVIDER: "other" }).ai),
+    ).toEqual({
+      configured: false,
+      reason: 'AI_PROVIDER "other" is not supported. Use one of: gemini, openai.',
+    });
 
-    const ready = createProvider(
-      loadConfig({ OPENAI_API_KEY: "sk", AI_MODEL: "m" }).ai,
+    const gemini = createProvider(
+      loadConfig({
+        GEMINI_API_KEY: "g",
+        AI_MODEL: "gemini-3.8-flash",
+        AI_THINKING_LEVEL: "LOW",
+        GEMINI_BASE_URL: "https://proxy.example/v1beta",
+      }).ai,
     );
-    expect(ready.configured && ready.provider.name).toBe("openai");
+    expect(gemini.configured && gemini.provider.name).toBe("gemini");
+
+    const openai = createProvider(
+      loadConfig({ AI_PROVIDER: "OpenAI", OPENAI_API_KEY: "sk", AI_MODEL: "m" }).ai,
+    );
+    expect(openai.configured && openai.provider.name).toBe("openai");
   });
 });
 

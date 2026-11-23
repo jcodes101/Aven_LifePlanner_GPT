@@ -29,6 +29,7 @@ export type AIProviderErrorKind =
   | "rate_limit"
   | "timeout"
   | "bad_response"
+  | "blocked"
   | "unavailable";
 
 export class AIProviderError extends Error {

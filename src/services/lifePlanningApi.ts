@@ -22,6 +22,7 @@ export type LifePlanningErrorKind =
   | "invalid_request"
   | "server"
   | "invalid_response"
+  | "blocked"
   | "aborted";
 
 export class LifePlanningApiError extends Error {
@@ -34,7 +35,11 @@ export class LifePlanningApiError extends Error {
   }
 
   get retryable(): boolean {
-    return this.kind !== "invalid_request" && this.kind !== "aborted";
+    return (
+      this.kind !== "invalid_request" &&
+      this.kind !== "blocked" &&
+      this.kind !== "aborted"
+    );
   }
 }
 
@@ -87,6 +92,12 @@ function errorFromStatus(status: number, code: unknown, message: unknown) {
     return new LifePlanningApiError(
       "not_configured",
       "Life Planning AI isn't set up on the server yet, so no reply was generated.",
+    );
+  }
+  if (code === "ai_blocked") {
+    return new LifePlanningApiError(
+      "blocked",
+      "Aven can't respond to that message. Try rephrasing it.",
     );
   }
   if (status === 429 || code === "ai_busy") {

@@ -4,11 +4,12 @@ export type ServerConfig = {
   trustProxy: boolean;
   ai: {
     provider: string;
-    apiKey: string | null;
     model: string | null;
-    baseUrl: string;
     timeoutMs: number;
     maxOutputTokens: number;
+    thinkingLevel: string | null;
+    gemini: { apiKey: string | null; baseUrl: string | null };
+    openai: { apiKey: string | null; baseUrl: string };
   };
   rateLimit: {
     windowMs: number;
@@ -48,15 +49,23 @@ export function loadConfig(
       : DEFAULT_DEV_ORIGINS,
     trustProxy: env.TRUST_PROXY === "true",
     ai: {
-      provider: (readString(env.AI_PROVIDER) ?? "openai").toLowerCase(),
-      apiKey: readString(env.OPENAI_API_KEY),
+      provider: (readString(env.AI_PROVIDER) ?? "gemini").toLowerCase(),
       model: readString(env.AI_MODEL),
-      baseUrl: readString(env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
       timeoutMs: readInt(env.AI_TIMEOUT_MS, 30000, { min: 1000, max: 120000 }),
-      maxOutputTokens: readInt(env.AI_MAX_OUTPUT_TOKENS, 1200, {
+      // Generous by default: on Gemini, thinking tokens count toward this.
+      maxOutputTokens: readInt(env.AI_MAX_OUTPUT_TOKENS, 4096, {
         min: 100,
-        max: 8000,
+        max: 32768,
       }),
+      thinkingLevel: readString(env.AI_THINKING_LEVEL)?.toLowerCase() ?? null,
+      gemini: {
+        apiKey: readString(env.GEMINI_API_KEY),
+        baseUrl: readString(env.GEMINI_BASE_URL),
+      },
+      openai: {
+        apiKey: readString(env.OPENAI_API_KEY),
+        baseUrl: readString(env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
+      },
     },
     rateLimit: {
       windowMs: readInt(env.RATE_LIMIT_WINDOW_MS, 60000, {
