@@ -47,7 +47,13 @@ function MoreMenuItem({
   );
 }
 
-export function MoreMenu({ onSignOut }: { onSignOut: () => void }) {
+export function MoreMenu({
+  onSignOut,
+  onRecentChats,
+}: {
+  onSignOut: () => void;
+  onRecentChats: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [scope, animate] = useAnimate();
@@ -105,7 +111,7 @@ export function MoreMenu({ onSignOut }: { onSignOut: () => void }) {
 
   const menuItems = [
     { icon: PiGearSixThin, label: "Settings" },
-    { icon: IoChatbubblesOutline, label: "Recent Chats" },
+    { icon: IoChatbubblesOutline, label: "Recent Chats", action: onRecentChats },
     { icon: VscSignOut, label: "Sign Out", action: onSignOut },
   ];
 

@@ -79,13 +79,13 @@ export const MODE_ORDER: ThemeKey[] = [
   "lifePlanning",
 ];
 
-export const MOCK_RESPONSES: Record<ThemeKey, string> = {
+// Placeholder replies for modes that do not have a real AI backend yet.
+// Life Planning is intentionally absent: it calls the Aven API server.
+export const MOCK_RESPONSES: Record<Exclude<ThemeKey, "lifePlanning">, string> = {
   default:
     "Let's look at the patterns in your life and explore what direction feels most aligned for you right now.",
   financiality:
     "Based on what you've shared, I can help you look at your spending, saving, and financial goals together.",
   wellness:
     "I can help you look at your current routines and identify patterns that may affect your overall wellbeing.",
-  lifePlanning:
-    "Let's look at where your current habits are taking you and explore what could change your trajectory.",
 };

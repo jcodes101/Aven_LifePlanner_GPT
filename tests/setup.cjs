@@ -49,7 +49,14 @@ jest.mock("react-spinners", () => ({
       : null,
 }));
 
-if (!window.matchMedia) {
+// Server tests run in the "node" environment, which has no window.
+const hasWindow = typeof window !== "undefined";
+
+if (hasWindow) {
+  beforeEach(() => window.localStorage.clear());
+}
+
+if (hasWindow && !window.matchMedia) {
   window.matchMedia = (media) => ({
     matches: false,
     media,
