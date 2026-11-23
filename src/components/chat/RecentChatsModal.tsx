@@ -100,7 +100,7 @@ export function RecentChatsModal({
       {open && (
         <motion.div
           key="recent-chats"
-          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(44,40,72,0.16)] px-4 py-6 backdrop-blur-[6px]"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(44,40,72,0.16)] px-4 py-6 backdrop-blur-[6px]"
           data-testid="recent-chats-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -116,7 +116,7 @@ export function RecentChatsModal({
             aria-modal="true"
             aria-labelledby="recent-chats-title"
             aria-describedby="recent-chats-description"
-            className="flex max-h-[min(80dvh,640px)] w-full max-w-135 flex-col rounded-[28px] border border-white/50 bg-white/45 p-5 text-[rgba(33,36,51,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_24px_48px_rgba(110,104,160,0.18)] backdrop-blur-[22px] max-[760px]:p-4"
+            className="flex max-h-[min(80dvh,640px)] w-full min-w-0 max-w-135 flex-col rounded-[28px] border border-white/50 bg-white/45 p-5 text-[rgba(33,36,51,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_24px_48px_rgba(110,104,160,0.18)] backdrop-blur-[22px] max-[760px]:p-4"
             initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14, scale: prefersReducedMotion ? 1 : 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: prefersReducedMotion ? 0 : 10, scale: prefersReducedMotion ? 1 : 0.98 }}
@@ -140,11 +140,11 @@ export function RecentChatsModal({
               </div>
               <button
                 type="button"
-                className="flex min-h-10 items-center gap-1.5 rounded-full border border-white/50 bg-white/25 px-3.5 text-sm font-light shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-white/40"
+                className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/50 bg-white/25 px-3.5 text-sm font-light shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-white/40 max-[420px]:px-2.5"
                 onClick={onNewChat}
               >
                 <PiPlusThin aria-hidden="true" className="text-lg" />
-                New chat
+                <span className="max-[420px]:sr-only">New chat</span>
               </button>
               <button
                 ref={closeButton}
