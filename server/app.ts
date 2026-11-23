@@ -3,7 +3,7 @@ import { AIProviderError, type AIProvider } from "./ai/types.ts";
 import type { ServerConfig } from "./config.ts";
 import {
   LIFE_PLANNING_PROMPT_VERSION,
-  LIFE_PLANNING_SYSTEM_PROMPT,
+  buildLifePlanningSystemPrompt,
 } from "./prompts/lifePlanning.ts";
 import { createRateLimiter } from "./rateLimit.ts";
 import { validateLifePlanningRequest } from "./validation.ts";
@@ -241,7 +241,7 @@ export function createApp({
     try {
       const result = await provider.complete({
         messages: [
-          { role: "system", content: LIFE_PLANNING_SYSTEM_PROMPT },
+          { role: "system", content: buildLifePlanningSystemPrompt(new Date(now())) },
           ...validation.messages,
         ],
         maxOutputTokens: config.ai.maxOutputTokens,

@@ -19,7 +19,7 @@ server.listen(config.port, () => {
   console.info(`[server] Allowed origins: ${config.allowedOrigins.join(", ")}`);
   if (setup.configured) {
     console.info(
-      `[server] Life Planning AI ready (provider: ${setup.provider.name}, model: ${config.ai.model}).`,
+      `[server] Life Planning AI ready (provider: ${setup.provider.name}, model: ${config.ai.model}${config.ai.fallbackModels.length ? `, fallbacks: ${config.ai.fallbackModels.join(", ")}` : ""}).`,
     );
     void checkGeminiModel();
   } else {
@@ -40,13 +40,15 @@ async function checkGeminiModel() {
   if (config.ai.provider !== "gemini" || !apiKey || !config.ai.model) return;
   try {
     const models = await listGeminiModels({ apiKey, ...(baseUrl ? { baseUrl } : {}) });
-    const wanted = config.ai.model.replace(/^models\//, "");
-    if (!models.some((model) => model.id === wanted)) {
-      console.warn(
-        `[server] AI_MODEL "${wanted}" is not available to this key. Run "npm run models" and pick one of the listed IDs.`,
-      );
-    } else {
-      console.info(`[server] Verified "${wanted}" is available to this key.`);
+    for (const configured of [config.ai.model, ...config.ai.fallbackModels]) {
+      const wanted = configured.replace(/^models\//, "");
+      if (!models.some((model) => model.id === wanted)) {
+        console.warn(
+          `[server] Model "${wanted}" is not available to this key. Run "npm run models" and pick one of the listed IDs.`,
+        );
+      } else {
+        console.info(`[server] Verified "${wanted}" is available to this key.`);
+      }
     }
   } catch (error) {
     console.warn(`[server] Could not verify AI_MODEL: ${(error as Error).message}`);

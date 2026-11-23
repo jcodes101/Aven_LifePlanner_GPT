@@ -163,6 +163,7 @@ describe("Gemini provider", () => {
     [400, { error: { status: "INVALID_ARGUMENT", message: "API key not valid. Please pass a valid API key." } }, "auth"],
     [403, { error: { status: "PERMISSION_DENIED", message: "denied" } }, "auth"],
     [429, { error: { status: "RESOURCE_EXHAUSTED", message: "quota" } }, "rate_limit"],
+    [503, { error: { status: "UNAVAILABLE", message: "This model is currently experiencing high demand." } }, "rate_limit"],
     [404, { error: { status: "NOT_FOUND", message: "model not found" } }, "unavailable"],
     [400, { error: { status: "INVALID_ARGUMENT", message: "contents is empty" } }, "unavailable"],
     [500, "not json", "unavailable"],

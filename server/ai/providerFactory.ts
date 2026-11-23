@@ -1,4 +1,5 @@
 import type { ServerConfig } from "../config.ts";
+import { createFallbackProvider } from "./fallbackProvider.ts";
 import { createGeminiProvider } from "./geminiProvider.ts";
 import { createOpenAIProvider } from "./openaiProvider.ts";
 import type { AIProvider } from "./types.ts";
@@ -19,14 +20,22 @@ export function createProvider(config: ServerConfig["ai"]): ProviderSetup {
     if (!config.model) {
       return { configured: false, reason: "AI_MODEL is not set." };
     }
+    const { apiKey, baseUrl } = config.gemini;
+    const models = [config.model, ...config.fallbackModels].filter(
+      (model, index, list) => list.indexOf(model) === index,
+    );
     return {
       configured: true,
-      provider: createGeminiProvider({
-        apiKey: config.gemini.apiKey,
-        model: config.model,
-        thinkingLevel: config.thinkingLevel,
-        ...(config.gemini.baseUrl ? { baseUrl: config.gemini.baseUrl } : {}),
-      }),
+      provider: createFallbackProvider(
+        models.map((model) =>
+          createGeminiProvider({
+            apiKey,
+            model,
+            thinkingLevel: config.thinkingLevel,
+            ...(baseUrl ? { baseUrl } : {}),
+          }),
+        ),
+      ),
     };
   }
 

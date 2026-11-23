@@ -151,10 +151,14 @@ export function createGeminiProvider({
             response.status,
           );
         }
-        if (response.status === 429) {
+        // 429 = quota used up; 503 = "model is experiencing high demand"
+        // (common on the free tier). Both mean "busy, try again shortly".
+        if (response.status === 429 || response.status === 503) {
           throw new AIProviderError(
             "rate_limit",
-            "The AI provider is rate limiting requests (free tier quota?).",
+            response.status === 503
+              ? "The model is overloaded right now (HTTP 503)."
+              : "The AI provider is rate limiting requests (free tier quota?).",
             response.status,
           );
         }

@@ -5,6 +5,7 @@ export type ServerConfig = {
   ai: {
     provider: string;
     model: string | null;
+    fallbackModels: string[];
     timeoutMs: number;
     maxOutputTokens: number;
     thinkingLevel: string | null;
@@ -51,6 +52,10 @@ export function loadConfig(
     ai: {
       provider: (readString(env.AI_PROVIDER) ?? "gemini").toLowerCase(),
       model: readString(env.AI_MODEL),
+      fallbackModels: (readString(env.AI_FALLBACK_MODELS) ?? "")
+        .split(",")
+        .map((model) => model.trim())
+        .filter(Boolean),
       timeoutMs: readInt(env.AI_TIMEOUT_MS, 30000, { min: 1000, max: 120000 }),
       // Generous by default: on Gemini, thinking tokens count toward this.
       maxOutputTokens: readInt(env.AI_MAX_OUTPUT_TOKENS, 4096, {

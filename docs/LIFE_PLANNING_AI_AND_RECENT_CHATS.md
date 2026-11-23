@@ -67,7 +67,8 @@ npm run dev                 # http://localhost:5173 (proxies /api to :8787)
 | --- | --- | --- | --- |
 | `AI_PROVIDER` | no | `gemini` | `gemini` or `openai`. |
 | `GEMINI_API_KEY` | yes, for Gemini | none | Secret key from https://aistudio.google.com/apikey. Server-side only. |
-| `AI_MODEL` | yes | none (`.env.example` suggests `gemini-3.8-flash`) | Model ID. Run `npm run models` to see what your key can use. |
+| `AI_MODEL` | yes | none (`.env.example` suggests `gemini-flash-lite-latest`) | Model ID. Run `npm run models` to see what your key can use. |
+| `AI_FALLBACK_MODELS` | no | none | Comma-separated models tried in order when one is busy (503/429). |
 | `AI_THINKING_LEVEL` | no | model default | Gemini 3+ thinking effort: `minimal`, `low`, `medium`, `high`. `.env.example` uses `low` for quick replies. |
 | `GEMINI_BASE_URL` | no | `https://generativelanguage.googleapis.com/v1beta` | Override for proxies/testing. |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | only for `openai` | none / `https://api.openai.com/v1` | OpenAI or any OpenAI-compatible endpoint. |
@@ -148,6 +149,19 @@ sent in the `x-goog-api-key` header, never in the URL. Thought parts are
 stripped from replies. Gemini-specific outcomes (invalid key returned as 400,
 quota 429, unknown model 404, safety blocks, thinking that uses the whole
 token budget) are mapped to the API error codes below.
+
+**Tested with a real key on 2026-11-23.** `npm run models` listed 49
+models for the key. The larger free-tier models were overloaded at the time:
+`gemini-3.8-flash`, `gemini-3.5-flash`, and `gemini-3.6-flash` did not answer
+within 25 to 35 seconds, and `gemini-flash-latest` and `gemini-3.1-flash-lite`
+returned HTTP 503 "high demand". `gemini-flash-lite-latest` (which resolved to
+`gemini-3.5-flash-lite`) answered a full multi-turn Life Planning request
+through the Aven server in about 3 seconds. That is why `.env.example` now
+defaults to it with `AI_FALLBACK_MODELS`: when a model is busy (503 or 429),
+the server tries the next one; other errors are reported right away. Busy
+errors show users "Aven is busy" rather than a generic failure. The system
+prompt also includes today's date, because without it the model got
+graduation timelines wrong.
 
 Two safeguards for real keys: on startup the server checks that `AI_MODEL`
 is in the key's model list and logs a warning if not (it never blocks

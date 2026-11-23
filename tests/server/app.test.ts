@@ -95,10 +95,9 @@ describe("POST /api/chat/life-planning", () => {
     });
 
     const request = provider.complete.mock.calls[0][0] as CompletionRequest;
-    expect(request.messages[0]).toEqual({
-      role: "system",
-      content: LIFE_PLANNING_SYSTEM_PROMPT,
-    });
+    expect(request.messages[0].role).toBe("system");
+    expect(request.messages[0].content.startsWith(LIFE_PLANNING_SYSTEM_PROMPT)).toBe(true);
+    expect(request.messages[0].content).toContain("Today's date is");
     // The full multi-turn history follows the system prompt, in order.
     expect(request.messages.slice(1)).toEqual(validBody.messages);
     expect(request.maxOutputTokens).toBeGreaterThan(0);
