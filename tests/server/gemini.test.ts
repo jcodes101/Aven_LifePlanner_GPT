@@ -115,6 +115,38 @@ describe("Gemini provider", () => {
     expect(result.model).toBe("models/gemini-3.5-flash-lite");
   });
 
+  test("retries once without thinkingConfig when the model rejects it, then remembers", async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(400, {
+          error: { status: "INVALID_ARGUMENT", message: "Thinking level is not supported for this model." },
+        }),
+      )
+      .mockImplementation(async () => geminiReply([{ text: "Plan ready." }]));
+    const provider = providerWith(fetchImpl);
+
+    expect((await provider.complete(request)).content).toBe("Plan ready.");
+    const bodies = fetchImpl.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies[0].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
+    expect(bodies[1].generationConfig.thinkingConfig).toBeUndefined();
+
+    await provider.complete(request);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body).generationConfig.thinkingConfig).toBeUndefined();
+  });
+
+  test("still reports the error when the retry without thinking also fails", async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(400, { error: { message: "bad thinking config" } }))
+      .mockResolvedValueOnce(jsonResponse(429, { error: { status: "RESOURCE_EXHAUSTED" } }));
+    await expect(providerWith(fetchImpl).complete(request)).rejects.toMatchObject({
+      kind: "rate_limit",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   test("returns only visible text, skipping thought parts", async () => {
     const fetchImpl = jest.fn(async () =>
       geminiReply([
@@ -132,7 +164,7 @@ describe("Gemini provider", () => {
     [403, { error: { status: "PERMISSION_DENIED", message: "denied" } }, "auth"],
     [429, { error: { status: "RESOURCE_EXHAUSTED", message: "quota" } }, "rate_limit"],
     [404, { error: { status: "NOT_FOUND", message: "model not found" } }, "unavailable"],
-    [400, { error: { status: "INVALID_ARGUMENT", message: "bad thinking level" } }, "unavailable"],
+    [400, { error: { status: "INVALID_ARGUMENT", message: "contents is empty" } }, "unavailable"],
     [500, "not json", "unavailable"],
   ])("maps HTTP %i errors (%#)", async (status, body, kind) => {
     const fetchImpl = jest.fn(async () =>

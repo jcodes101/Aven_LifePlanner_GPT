@@ -76,6 +76,7 @@ export function createGeminiProvider({
 }: GeminiProviderOptions): AIProvider {
   const modelPath = model.startsWith("models/") ? model : `models/${model}`;
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/${modelPath}:generateContent`;
+  let thinkingSupported = true;
 
   return {
     name: "gemini",
@@ -84,9 +85,8 @@ export function createGeminiProvider({
       maxOutputTokens,
       signal,
     }: CompletionRequest): Promise<CompletionResult> {
-      let response: Response;
-      try {
-        response = await fetchImpl(endpoint, {
+      const post = (withThinking: boolean) =>
+        fetchImpl(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -97,11 +97,37 @@ export function createGeminiProvider({
             ...toGeminiRequest(messages),
             generationConfig: {
               maxOutputTokens,
-              ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
+              ...(withThinking ? { thinkingConfig: { thinkingLevel } } : {}),
             },
           }),
           signal,
         });
+
+      const readReason = async (failed: Response) => {
+        try {
+          const body = (await failed.json()) as {
+            error?: { status?: unknown; message?: unknown };
+          };
+          return `${body.error?.status ?? ""} ${body.error?.message ?? ""}`;
+        } catch {
+          // Non-JSON error body; classify by status alone.
+          return "";
+        }
+      };
+
+      let response: Response;
+      let reason = "";
+      try {
+        const withThinking = Boolean(thinkingLevel) && thinkingSupported;
+        response = await post(withThinking);
+        if (!response.ok) reason = await readReason(response);
+        // Some models reject thinking settings. Drop them once and remember,
+        // instead of failing every chat because of an optional tuning knob.
+        if (withThinking && response.status === 400 && /thinking/i.test(reason)) {
+          thinkingSupported = false;
+          response = await post(false);
+          reason = response.ok ? "" : await readReason(response);
+        }
       } catch (error) {
         if (signal.aborted) {
           throw new AIProviderError("timeout", "The AI request was aborted.");
@@ -113,16 +139,6 @@ export function createGeminiProvider({
       }
 
       if (!response.ok) {
-        let reason = "";
-        try {
-          const body = (await response.json()) as {
-            error?: { status?: unknown; message?: unknown };
-          };
-          reason = `${body.error?.status ?? ""} ${body.error?.message ?? ""}`;
-        } catch {
-          // Non-JSON error body; classify by status alone.
-        }
-
         // An invalid key comes back as 400 INVALID_ARGUMENT, not 401.
         if (
           response.status === 401 ||
