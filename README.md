@@ -7,7 +7,7 @@ Aven is an AI life planning application concept designed to help people understa
 [Click Here](https://jcodes101.github.io/Aven_LifePlanner_GPT/)
 
 - Glassmorphism chat interface with the Aven lotus loading animation
-- **Life Planning mode backed by a real LLM** through the Aven API server (`server/`), when that server is running and configured
+- **Life Planning mode backed by a real LLM** (Google Gemini by default, free tier) through the Aven API server (`server/`), when that server is running and configured
 - **Recent Chats**: conversations are saved in the browser and can be reopened and continued
 - Responsive layout and an animated More menu
 - SF Pro font stack and Framer Motion animations
@@ -64,7 +64,8 @@ npm run dev
 ### (Optional) Start the Aven API server for Life Planning AI
 
 ```bash
-cp .env.example .env   # set OPENAI_API_KEY and AI_MODEL (server-side only)
+cp .env.example .env   # set GEMINI_API_KEY (free: https://aistudio.google.com/apikey), server-side only
+npm run models         # see which Gemini models your key can use; set AI_MODEL
 npm run dev:server     # http://localhost:8787, proxied by Vite at /api
 ```
 

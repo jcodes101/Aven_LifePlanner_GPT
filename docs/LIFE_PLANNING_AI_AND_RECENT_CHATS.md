@@ -16,7 +16,8 @@ Browser (React, GitHub Pages or `npm run dev`)
 Aven API server (Node, `server/`)                            
   app.ts  ── validation ── rate limit ── CORS allowlist      
      │                                                       
-     └─ AIProvider interface ── openaiProvider.ts ──► OpenAI Chat Completions
+     └─ AIProvider interface ─┬─ geminiProvider.ts ──► Google Gemini generateContent (default)
+                               └─ openaiProvider.ts ──► OpenAI Chat Completions (optional)
           (system prompt from prompts/lifePlanning.ts is added here)
 ```
 
@@ -31,7 +32,8 @@ Aven API server (Node, `server/`)
 | Recent Chats dialog | `src/components/chat/RecentChatsModal.tsx` |
 | HTTP server, routes, security controls | `server/app.ts` |
 | Request validation | `server/validation.ts` |
-| Provider abstraction / OpenAI implementation | `server/ai/` |
+| Provider abstraction, Gemini (default) and OpenAI implementations | `server/ai/` |
+| List models your key can use (`npm run models`) | `server/listModels.ts` |
 | Life Planning system prompt | `server/prompts/lifePlanning.ts` |
 | Env configuration | `server/config.ts`, `.env.example` |
 
@@ -43,7 +45,8 @@ Requires Node.js 22.9 or newer.
 npm install
 
 # Terminal 1: the Aven API server (compiles server/ to server-dist/ and runs it)
-cp .env.example .env        # then set OPENAI_API_KEY and AI_MODEL
+cp .env.example .env        # then set GEMINI_API_KEY (free at aistudio.google.com/apikey)
+npm run models              # lists the models your key can use; set AI_MODEL to one
 npm run dev:server          # http://localhost:8787
 
 # Terminal 2: the React app
@@ -62,15 +65,17 @@ npm run dev                 # http://localhost:5173 (proxies /api to :8787)
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `OPENAI_API_KEY` | yes, for real AI | none | Secret key. Server-side only. |
-| `AI_MODEL` | yes, for real AI | none | Model ID. No default on purpose: pick one your account can use from https://platform.openai.com/docs/models. |
-| `AI_PROVIDER` | no | `openai` | Provider selector (only `openai` exists today). |
-| `OPENAI_BASE_URL` | no | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint. |
+| `AI_PROVIDER` | no | `gemini` | `gemini` or `openai`. |
+| `GEMINI_API_KEY` | yes, for Gemini | none | Secret key from https://aistudio.google.com/apikey. Server-side only. |
+| `AI_MODEL` | yes | none (`.env.example` suggests `gemini-3.8-flash`) | Model ID. Run `npm run models` to see what your key can use. |
+| `AI_THINKING_LEVEL` | no | model default | Gemini 3+ thinking effort: `minimal`, `low`, `medium`, `high`. `.env.example` uses `low` for quick replies. |
+| `GEMINI_BASE_URL` | no | `https://generativelanguage.googleapis.com/v1beta` | Override for proxies/testing. |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | only for `openai` | none / `https://api.openai.com/v1` | OpenAI or any OpenAI-compatible endpoint. |
 | `PORT` | no | `8787` | API port. The Vite proxy reads it too. |
 | `ALLOWED_ORIGINS` | no | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API. |
 | `TRUST_PROXY` | no | `false` | Use `X-Forwarded-For` for rate limiting (set `true` behind a hosting proxy). |
 | `AI_TIMEOUT_MS` | no | `30000` | Provider timeout (1,000 to 120,000). |
-| `AI_MAX_OUTPUT_TOKENS` | no | `1200` | Max completion tokens per reply. |
+| `AI_MAX_OUTPUT_TOKENS` | no | `4096` | Max output tokens per reply. On Gemini this **includes thinking tokens**, so keep it generous. |
 | `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | no | `60000` / `20` | Per-client request limit. |
 
 Frontend (build time, public): `VITE_AVEN_API_URL`, the public URL of the
@@ -94,7 +99,7 @@ Success (200):
 
 ```json
 { "message": { "role": "assistant", "content": "..." },
-  "model": "...", "provider": "openai", "finishReason": "stop" }
+  "model": "gemini-3.8-flash", "provider": "gemini", "finishReason": "STOP" }
 ```
 
 Errors use `{ "error": { "code", "message" } }`:
@@ -107,7 +112,8 @@ Errors use `{ "error": { "code", "message" } }`:
 | 415 | `unsupported_media_type` | Not `application/json` |
 | 429 | `rate_limited` | Too many requests (`Retry-After` header) |
 | 503 | `ai_not_configured` | No key or model configured |
-| 503 | `ai_busy` | Provider rate limited us |
+| 503 | `ai_busy` | Provider rate limited us (e.g. free-tier quota used up) |
+| 422 | `ai_blocked` | The provider's safety filters blocked the message or reply (not retryable) |
 | 504 | `ai_timeout` | Provider exceeded `AI_TIMEOUT_MS` |
 | 502 | `ai_provider_error` | Any other provider failure (details only in server logs) |
 
@@ -118,6 +124,30 @@ send `system` messages. The API key is never logged or returned. Provider
 error bodies are not forwarded to the browser. Requests are limited by size,
 rate, and origin, responses are `no-store`, and the provider call is aborted
 if the browser disconnects.
+
+## AI provider: Gemini (free tier)
+
+Gemini is the default provider because Google AI Studio offers a free tier.
+As of November 2026, Google's pricing page lists these text models as
+free-tier eligible: `gemini-3.8-flash` (recommended for general chat),
+`gemini-4-hydrogen`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, and
+`gemini-3.1-flash-lite`. `gemini-2.5-*` models are deprecated and being routed
+to newer ones by December 1, 2026. Model lists change, so run
+`npm run models` with your key to see what is actually available, and check
+https://aistudio.google.com/rate-limit for your free-tier limits.
+
+**Privacy note:** on the free tier, Google states content may be used to
+improve its products (paid tier: no). Life-planning chats can be personal, so
+tell testers not to enter sensitive information, or enable billing before any
+real users.
+
+The integration uses Gemini's `generateContent` REST endpoint, which is
+stateless (we send the conversation each turn) and does not store chats on
+Google's side the way the newer Interactions API does by default. The key is
+sent in the `x-goog-api-key` header, never in the URL. Thought parts are
+stripped from replies. Gemini-specific outcomes (invalid key returned as 400,
+quota 429, unknown model 404, safety blocks, thinking that uses the whole
+token budget) are mapped to the API error codes below.
 
 ## Life Planning behavior
 
@@ -196,7 +226,7 @@ To enable real AI in production:
 1. Deploy the API server to a Node host (Render, Railway, Fly.io, a VPS, etc.):
    - Build command: `npm ci && npm run build:server`
    - Start command: `npm run start:server`
-   - Environment: `OPENAI_API_KEY`, `AI_MODEL`,
+   - Environment: `GEMINI_API_KEY`, `AI_MODEL`, `AI_THINKING_LEVEL=low`,
      `ALLOWED_ORIGINS=https://jcodes101.github.io`, `TRUST_PROXY=true`.
      Most hosts set `PORT` automatically.
 2. Check `https://<your-api-host>/api/health` returns `"aiConfigured": true`.
@@ -207,8 +237,10 @@ To enable real AI in production:
 
 Cost safety: the endpoint has no user authentication yet (sign-in is
 simulated), so anyone who finds the URL could use it within the rate limit.
-Set a monthly spending limit in the OpenAI dashboard, keep `RATE_LIMIT_MAX`
-low, and add real authentication when the auth work lands.
+On the Gemini free tier that means the shared daily quota can run out (users
+then see "Aven is busy"); it won't create charges unless billing is enabled on
+the Google Cloud project. Keep `RATE_LIMIT_MAX` low and add real
+authentication when the auth work lands.
 
 ## Tests
 
