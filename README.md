@@ -6,12 +6,13 @@ Aven is an AI life planning application concept designed to help people understa
 
 [Click Here](https://jcodes101.github.io/Aven_LifePlanner_GPT/)
 
-- Glassmorphism chat interface with a simulated response flow
-- Aven lotus loading animation during mock responses
+- Glassmorphism chat interface with the Aven lotus loading animation
+- **Life Planning mode backed by a real LLM** through the Aven API server (`server/`), when that server is running and configured
+- **Recent Chats**: conversations are saved in the browser and can be reopened and continued
 - Responsive layout and an animated More menu
 - SF Pro font stack and Framer Motion animations
 
-Authentication and AI responses are simulated in the browser. There is no production AI backend, persistent account system, or database integration in this MVP.
+Authentication is simulated, and the General, Financiality, and Wellness modes still return placeholder responses. The GitHub Pages site is static hosting, so Life Planning there shows a "not connected" message until the API server is deployed and `VITE_AVEN_API_URL` is set. Saved chats live only in this browser's storage and are not account-backed. See [docs/LIFE_PLANNING_AI_AND_RECENT_CHATS.md](docs/LIFE_PLANNING_AI_AND_RECENT_CHATS.md) for setup, architecture, and limitations.
 
 ## Built With
 
@@ -60,6 +61,22 @@ npm install
 npm run dev
 ```
 
+### (Optional) Start the Aven API server for Life Planning AI
+
+```bash
+cp .env.example .env   # set OPENAI_API_KEY and AI_MODEL (server-side only)
+npm run dev:server     # http://localhost:8787, proxied by Vite at /api
+```
+
+Without a key, the app still runs and Life Planning explains that the AI isn't configured.
+
+### Run the tests
+
+```bash
+npm test -- --runInBand
+npm run test:coverage
+```
+
 ### Create a production build
 
 ```bash
@@ -74,7 +91,7 @@ npm run preview
 
 ## Deployment
 
-The application is deployed to GitHub Pages with GitHub Actions. A push to `main` builds the Vite application and deploys the generated `dist` artifact. The published site is [https://jcodes101.github.io/Aven_LifePlanner_GPT/](https://jcodes101.github.io/Aven_LifePlanner_GPT/).
+The application is deployed to GitHub Pages with GitHub Actions. A push to `main` builds the Vite application and deploys the generated `dist` artifact. The Life Planning API server must be hosted separately; set the `VITE_AVEN_API_URL` repository variable to its URL (see the docs linked above). The published site is [https://jcodes101.github.io/Aven_LifePlanner_GPT/](https://jcodes101.github.io/Aven_LifePlanner_GPT/).
 
 ## Status
 
