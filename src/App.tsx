@@ -4,18 +4,42 @@ import {
   motion,
   useReducedMotion,
 } from "framer-motion";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { AvenLogo, AvenRing } from "./components/branding/AvenLogo";
 import { ChatBox } from "./components/chat/ChatBox";
+import { RecentChatsModal } from "./components/chat/RecentChatsModal";
 import { MoreMenu } from "./components/navigation/MoreMenu";
 import { MODE_ORDER, MODE_THEMES, MOCK_RESPONSES } from "./constants/modes";
+import { useConversations } from "./hooks/useConversations";
+import { createLocalConversationStore } from "./services/conversationStore";
+import {
+  LifePlanningApiError,
+  buildApiMessages,
+  sendLifePlanningMessage,
+} from "./services/lifePlanningApi";
 import type {
   ChatAttachment,
   ChatMessage,
   ThemeKey,
   VoiceStatus,
 } from "./types";
+import { createId } from "./utils/conversations";
+
+type ChatError = {
+  conversationId: string;
+  message: string;
+  retryable: boolean;
+};
+
+const ATTACHMENTS_NOT_READ_NOTICE =
+  "Life Planning AI can't read attachments yet. Only the file names are shared with it.";
 
 type SpeechRecognitionResultLike = ArrayLike<{ transcript: string }> & {
   isFinal: boolean;
@@ -152,6 +176,12 @@ function AvenHome({
   voiceStatus,
   voiceMessage,
   onVoiceToggle,
+  onRecentChats,
+  onNewChat,
+  sendDisabled,
+  chatError,
+  notices,
+  composerRef,
 }: {
   activeMode: ThemeKey;
   onModeChange: (mode: ThemeKey) => void;
@@ -169,6 +199,12 @@ function AvenHome({
   voiceStatus: VoiceStatus;
   voiceMessage: string;
   onVoiceToggle: () => void;
+  onRecentChats: () => void;
+  onNewChat: () => void;
+  sendDisabled: boolean;
+  chatError: { message: string; onRetry?: () => void } | null;
+  notices: string[];
+  composerRef: RefObject<HTMLTextAreaElement | null>;
 }) {
   const theme = MODE_THEMES[activeMode];
   const prefersReducedMotion = useReducedMotion();
@@ -204,7 +240,7 @@ function AvenHome({
           <ModeSelector activeMode={activeMode} onSelect={onModeChange} />
         </motion.div>
         <div className="relative justify-self-end">
-          <MoreMenu onSignOut={onSignOut} />
+          <MoreMenu onSignOut={onSignOut} onRecentChats={onRecentChats} />
         </div>
       </motion.header>
 
@@ -295,6 +331,11 @@ function AvenHome({
             voiceStatus={voiceStatus}
             voiceMessage={voiceMessage}
             onVoiceToggle={onVoiceToggle}
+            sendDisabled={sendDisabled}
+            error={chatError}
+            notices={notices}
+            onNewChat={onNewChat}
+            composerRef={composerRef}
           />
         </motion.div>
       </main>
@@ -316,19 +357,48 @@ function App() {
   const [screenTransitioning, setScreenTransitioning] = useState(false);
   const [selectedMode, setSelectedMode] = useState<ThemeKey>("default");
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
-  const [thinking, setThinking] = useState(false);
+  const [pendingReply, setPendingReply] = useState<{
+    conversationId: string;
+  } | null>(null);
+  const [chatError, setChatError] = useState<ChatError | null>(null);
+  const [recentChatsOpen, setRecentChatsOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [voiceMessage, setVoiceMessage] = useState("");
+  const chats = useConversations();
   const responseTimer = useRef<number | null>(null);
   const signOutTimer = useRef<number | null>(null);
   const screenTransitionTimer = useRef<number | null>(null);
   const speechRecognition = useRef<SpeechRecognitionLike | null>(null);
   const previewUrls = useRef(new Set<string>());
+  // Life Planning request bookkeeping. Each request gets an id; a response is
+  // only applied if its id is still the active one, so cancelled or replaced
+  // requests can never write into a conversation.
+  const replyController = useRef<AbortController | null>(null);
+  const requestCounter = useRef(0);
+  const activeRequestId = useRef<number | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const recentChatsWasOpen = useRef(false);
 
-  const clearPreviewUrls = () => {
+  const activeConversation = chats.activeConversation;
+  const messages = activeConversation?.messages ?? [];
+  const thinking =
+    pendingReply !== null && pendingReply.conversationId === chats.activeId;
+
+  // Revokes previews for files still in the composer. Previews of files that
+  // were already sent stay alive so reopening a chat in this session still
+  // shows them; everything is revoked on sign-out or unmount.
+  const clearDraftPreviewUrls = () => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl);
+        previewUrls.current.delete(attachment.previewUrl);
+      }
+    });
+  };
+
+  const clearAllPreviewUrls = () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current.clear();
   };
@@ -341,10 +411,19 @@ function App() {
   };
 
   useEffect(() => {
+    if (!recentChatsOpen && recentChatsWasOpen.current) {
+      composerRef.current?.focus();
+    }
+    recentChatsWasOpen.current = recentChatsOpen;
+  }, [recentChatsOpen]);
+
+  useEffect(() => {
+    const urls = previewUrls.current;
     return () => {
       if (responseTimer.current !== null) {
         window.clearTimeout(responseTimer.current);
       }
+      replyController.current?.abort();
       if (signOutTimer.current !== null) {
         window.clearTimeout(signOutTimer.current);
       }
@@ -352,8 +431,8 @@ function App() {
         window.clearTimeout(screenTransitionTimer.current);
       }
       speechRecognition.current?.abort();
-      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
-      previewUrls.current.clear();
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
     };
   }, []);
 
@@ -482,6 +561,7 @@ function App() {
       return;
     }
 
+    chats.openStore(createLocalConversationStore(username));
     setScreenTransitioning(true);
     setScreen("intro");
     window.setTimeout(() => {
@@ -493,63 +573,169 @@ function App() {
     }, 1900);
   };
 
-  const resetConversation = () => {
+  const cancelPendingReply = () => {
     if (responseTimer.current !== null) {
       window.clearTimeout(responseTimer.current);
       responseTimer.current = null;
     }
-    clearPreviewUrls();
+    activeRequestId.current = null;
+    replyController.current?.abort();
+    replyController.current = null;
+    setPendingReply(null);
+    setChatError(null);
+  };
+
+  const resetComposer = () => {
+    clearDraftPreviewUrls();
     stopVoiceRecognition();
-    setMessages([]);
     setDraft("");
     setAttachments([]);
     setAttachmentError("");
-    setThinking(false);
+  };
+
+  const leaveConversation = () => {
+    cancelPendingReply();
+    resetComposer();
+  };
+
+  const requestLifePlanningReply = (
+    conversationId: string,
+    history: ChatMessage[],
+  ) => {
+    const requestId = ++requestCounter.current;
+    const controller = new AbortController();
+    activeRequestId.current = requestId;
+    replyController.current?.abort();
+    replyController.current = controller;
+    setPendingReply({ conversationId });
+    setChatError(null);
+
+    sendLifePlanningMessage(buildApiMessages(history), {
+      signal: controller.signal,
+    })
+      .then((reply) => {
+        if (activeRequestId.current !== requestId) return;
+        chats.addMessage(conversationId, "lifePlanning", {
+          id: createId(),
+          role: "aven",
+          text: reply.content,
+          createdAt: new Date().toISOString(),
+        });
+      })
+      .catch((error: unknown) => {
+        if (activeRequestId.current !== requestId) return;
+        const apiError =
+          error instanceof LifePlanningApiError
+            ? error
+            : new LifePlanningApiError(
+                "server",
+                "Something went wrong. Please try again.",
+              );
+        setChatError({
+          conversationId,
+          message: apiError.message,
+          retryable: apiError.retryable,
+        });
+      })
+      .finally(() => {
+        if (activeRequestId.current !== requestId) return;
+        activeRequestId.current = null;
+        replyController.current = null;
+        setPendingReply(null);
+      });
   };
 
   const handleSend = () => {
     const text = draft.trim();
     if (
       (!text && attachments.length === 0) ||
-      thinking ||
+      activeRequestId.current !== null ||
       responseTimer.current !== null
     ) {
       return;
     }
 
-    setMessages((current) => [
-      ...current,
-      { role: "user", text, attachments: [...attachments] },
-    ]);
+    const message: ChatMessage = {
+      id: createId(),
+      role: "user",
+      text,
+      createdAt: new Date().toISOString(),
+      ...(attachments.length > 0 ? { attachments: [...attachments] } : {}),
+    };
+    const history = [...messages, message];
+    const conversationId = chats.addMessage(
+      chats.activeId,
+      selectedMode,
+      message,
+    );
     setDraft("");
     setAttachments([]);
     setAttachmentError("");
-    setThinking(true);
 
+    if (selectedMode === "lifePlanning") {
+      requestLifePlanningReply(conversationId, history);
+      return;
+    }
+
+    // Other modes still use their placeholder replies until their owners
+    // connect them to a real backend.
+    setPendingReply({ conversationId });
+    setChatError(null);
     const responseMode = selectedMode;
     responseTimer.current = window.setTimeout(() => {
-      setMessages((current) => [
-        ...current,
-        { role: "aven", text: MOCK_RESPONSES[responseMode] },
-      ]);
-      setThinking(false);
       responseTimer.current = null;
+      chats.addMessage(conversationId, responseMode, {
+        id: createId(),
+        role: "aven",
+        text: MOCK_RESPONSES[responseMode],
+        createdAt: new Date().toISOString(),
+      });
+      setPendingReply(null);
     }, 5000);
+  };
+
+  const handleRetry = () => {
+    if (!activeConversation || activeRequestId.current !== null) return;
+    const lastMessage =
+      activeConversation.messages[activeConversation.messages.length - 1];
+    if (lastMessage?.role !== "user") return;
+    requestLifePlanningReply(activeConversation.id, activeConversation.messages);
   };
 
   const handleModeChange = (mode: ThemeKey) => {
     if (mode === selectedMode) return;
-    resetConversation();
+    leaveConversation();
+    chats.startNewConversation();
     setSelectedMode(mode);
   };
 
   const handleReturnToGeneral = () => {
-    resetConversation();
+    leaveConversation();
+    chats.startNewConversation();
     setSelectedMode("default");
   };
 
+  const handleNewChat = () => {
+    setRecentChatsOpen(false);
+    leaveConversation();
+    chats.startNewConversation();
+  };
+
+  const handleOpenConversation = (id: string) => {
+    setRecentChatsOpen(false);
+    if (id === chats.activeId) return;
+    const conversation = chats.conversations.find((item) => item.id === id);
+    if (!conversation) return;
+    leaveConversation();
+    chats.openConversation(id);
+    setSelectedMode(conversation.mode);
+  };
+
   const handleSignOut = () => {
-    resetConversation();
+    leaveConversation();
+    clearAllPreviewUrls();
+    chats.closeStore();
+    setRecentChatsOpen(false);
     setScreenTransitioning(true);
     setScreen("signout");
     setSelectedMode("default");
@@ -564,6 +750,30 @@ function App() {
       );
     }, 650);
   };
+
+  const lastMessage = messages[messages.length - 1];
+  const awaitingLifePlanningReply =
+    activeConversation?.mode === "lifePlanning" &&
+    lastMessage?.role === "user" &&
+    !thinking;
+  const visibleChatError =
+    chatError && chatError.conversationId === chats.activeId
+      ? {
+          message: chatError.message,
+          onRetry: chatError.retryable ? handleRetry : undefined,
+        }
+      : awaitingLifePlanningReply
+        ? {
+            message: "Aven hasn't replied to your last message yet.",
+            onRetry: handleRetry,
+          }
+        : null;
+  const notices = [
+    ...(chats.storageNotice ? [chats.storageNotice] : []),
+    ...(selectedMode === "lifePlanning" && attachments.length > 0
+      ? [ATTACHMENTS_NOT_READ_NOTICE]
+      : []),
+  ];
 
   return (
     <div
@@ -661,10 +871,24 @@ function App() {
               voiceStatus={voiceStatus}
               voiceMessage={voiceMessage}
               onVoiceToggle={handleVoiceToggle}
+              onRecentChats={() => setRecentChatsOpen(true)}
+              onNewChat={handleNewChat}
+              sendDisabled={thinking}
+              chatError={visibleChatError}
+              notices={notices}
+              composerRef={composerRef}
             />
           )}
         </AnimatePresence>
       </LayoutGroup>
+      <RecentChatsModal
+        open={screen === "home" && recentChatsOpen}
+        conversations={chats.conversations}
+        activeConversationId={chats.activeId}
+        onSelect={handleOpenConversation}
+        onNewChat={handleNewChat}
+        onClose={() => setRecentChatsOpen(false)}
+      />
     </div>
   );
 }

@@ -5,7 +5,19 @@ module.exports = {
   transform: {
     "^.+\\.[jt]sx?$": "babel-jest",
   },
-  collectCoverageFrom: ["src/App.tsx"],
+  // import.meta.env only exists inside Vite, so tests use a stand-in.
+  moduleNameMapper: {
+    "^.+/config/runtime$": "<rootDir>/tests/mocks/runtime.ts",
+  },
+  collectCoverageFrom: [
+    "src/App.tsx",
+    "src/components/chat/RecentChatsModal.tsx",
+    "src/hooks/**/*.ts",
+    "src/services/**/*.ts",
+    "src/utils/**/*.ts",
+    "server/**/*.ts",
+    "!server/index.ts",
+  ],
   coverageThreshold: {
     global: {
       lines: 85,

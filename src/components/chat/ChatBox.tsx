@@ -1,11 +1,12 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { CircleLoader } from "react-spinners";
 import {
   PiFileTextThin,
   PiMicrophoneThin,
   PiPaperclipThin,
   PiPaperPlaneRightThin,
+  PiPlusThin,
   PiXThin,
 } from "react-icons/pi";
 import { DeepThinkingButton } from "../ui/DeepThinkingButton";
@@ -26,6 +27,11 @@ export function ChatBox({
   voiceStatus,
   voiceMessage,
   onVoiceToggle,
+  sendDisabled = false,
+  error = null,
+  notices = [],
+  onNewChat,
+  composerRef,
 }: {
   accent: string;
   themeColors: [string, string, string];
@@ -41,9 +47,15 @@ export function ChatBox({
   voiceStatus: VoiceStatus;
   voiceMessage: string;
   onVoiceToggle: () => void;
+  sendDisabled?: boolean;
+  error?: { message: string; onRetry?: () => void } | null;
+  notices?: string[];
+  onNewChat?: () => void;
+  composerRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const composer = useRef<HTMLTextAreaElement>(null);
+  const ownComposer = useRef<HTMLTextAreaElement>(null);
+  const composer = composerRef ?? ownComposer;
   const prefersReducedMotion = useReducedMotion();
   const [deepThinkingEnabled, setDeepThinkingEnabled] = useState(false);
 
@@ -54,7 +66,7 @@ export function ChatBox({
     const height = Math.min(textarea.scrollHeight, 160);
     textarea.style.height = `${height}px`;
     textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
-  }, [value]);
+  }, [composer, value]);
 
   return (
     <div className="w-full max-w-255 rounded-[30px] border border-white/40 bg-white/10 p-4.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_18px_32px_rgba(120,118,166,0.09)] backdrop-blur-[18px] max-[760px]:px-3 max-[760px]:py-3">
@@ -63,16 +75,20 @@ export function ChatBox({
         aria-live="polite"
       >
         <AnimatePresence initial={false}>
-          {messages.map((message, index) => (
+          {messages.map((message) => (
             <motion.div
-              key={`${message.role}-${index}`}
+              key={message.id}
               className={`w-fit max-w-[72%] rounded-[18px] border border-white/35 px-4 py-3 leading-[1.45] text-[rgba(35,39,54,0.88)] max-[760px]:max-w-[88%] ${message.role === "user" ? "self-end bg-white/17" : "self-start bg-white/10"}`}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.35, ease: "easeOut" }}
             >
-              {message.text && <p className="m-0">{message.text}</p>}
+              {message.text && (
+                <p className="m-0 whitespace-pre-wrap break-words">
+                  {message.text}
+                </p>
+              )}
               {message.attachments && message.attachments.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {message.attachments.map((attachment) => (
@@ -92,7 +108,15 @@ export function ChatBox({
                           className="text-xl"
                         />
                       )}
-                      <span className="max-w-40 truncate">
+                      <span
+                        className="max-w-40 truncate"
+                        title={
+                          attachment.type.startsWith("image/") &&
+                          !attachment.previewUrl
+                            ? "Preview isn't available for restored chats"
+                            : undefined
+                        }
+                      >
                         {attachment.name}
                       </span>
                     </div>
@@ -133,6 +157,23 @@ export function ChatBox({
             </motion.div>
           )}
         </AnimatePresence>
+        {error && (
+          <div
+            className="flex w-fit max-w-[72%] flex-wrap items-center gap-3 self-start rounded-[18px] border border-rose-200/70 bg-rose-50/40 px-4 py-3 text-sm leading-[1.45] text-rose-900 max-[760px]:max-w-[88%]"
+            role="alert"
+          >
+            <p className="m-0 min-w-0 flex-1">{error.message}</p>
+            {error.onRetry && (
+              <button
+                type="button"
+                className="min-h-9 rounded-full border border-white/60 bg-white/45 px-4 text-sm font-light text-[rgba(32,34,47,0.9)] hover:bg-white/60"
+                onClick={error.onRetry}
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3.5">
@@ -172,6 +213,16 @@ export function ChatBox({
           </div>
         )}
 
+        {notices.map((notice) => (
+          <p
+            key={notice}
+            className="m-0 px-1 text-sm text-[rgba(49,54,74,0.85)]"
+            role="status"
+          >
+            {notice}
+          </p>
+        ))}
+
         {attachmentError && (
           <p className="m-0 px-1 text-sm text-rose-800" role="alert">
             {attachmentError}
@@ -204,7 +255,7 @@ export function ChatBox({
               (value.trim() || attachments.length)
             ) {
               event.preventDefault();
-              onSend();
+              if (!sendDisabled) onSend();
             }
           }}
           placeholder="Tell me what's on your mind..."
@@ -241,10 +292,23 @@ export function ChatBox({
             <PiMicrophoneThin />
           </button>
 
+          {onNewChat && messages.length > 0 && (
+            <button
+              type="button"
+              className="grid h-10.5 w-10.5 place-items-center rounded-full border border-white/40 bg-white/9 text-[rgba(29,33,45,0.8)] shadow-[inset_0_1px_0_rgba(255,255,255,0.26)]"
+              aria-label="New chat"
+              title="Start a new chat"
+              onClick={onNewChat}
+            >
+              <PiPlusThin />
+            </button>
+          )}
+
           <button
             type="button"
-            className="ml-auto grid h-10.5 w-10.5 place-items-center rounded-full border border-white/40 bg-[linear-gradient(135deg,rgba(220,224,255,0.4),rgba(228,214,255,0.28))] text-[rgba(29,33,45,0.8)] shadow-[0_12px_20px_rgba(148,121,197,0.12)]"
+            className="ml-auto grid h-10.5 w-10.5 place-items-center rounded-full border border-white/40 bg-[linear-gradient(135deg,rgba(220,224,255,0.4),rgba(228,214,255,0.28))] text-[rgba(29,33,45,0.8)] shadow-[0_12px_20px_rgba(148,121,197,0.12)] disabled:cursor-not-allowed disabled:opacity-55"
             aria-label="Send message"
+            disabled={sendDisabled}
             onClick={onSend}
           >
             <PiPaperPlaneRightThin />

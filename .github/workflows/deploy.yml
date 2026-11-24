@@ -33,6 +33,11 @@ jobs:
 
       - name: Build application
         run: npm run build
+        env:
+          # Public URL of the separately hosted Aven API (a repository
+          # variable, not a secret). Empty means Life Planning shows a
+          # "not connected" message instead of calling an API.
+          VITE_AVEN_API_URL: ${{ vars.VITE_AVEN_API_URL }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
